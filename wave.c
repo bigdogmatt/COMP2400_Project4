@@ -2,9 +2,11 @@
 #include <stdlib.h>
 #include "wave.h"
 #include <string.h>
+#include <limits.h>
 
 int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
+void echo(short channel[], WaveHeader *header, double delay, double volume);
 
 int main(int argc, char **argv)
 {
@@ -13,12 +15,14 @@ int main(int argc, char **argv)
 	while (currentArg < argc) {
 		if (strcmp( "-r", argv[currentArg]) == 0) {
 			// reverse sound
+			currentArg++;
 		} else if (strcmp("-s", argv[currentArg]) == 0) {
 			// change speed
 			currentArg++;
 			double speedFactor = strtod(argv[currentArg], NULL);
 		} else if (strcmp("-f", argv[currentArg]) == 0) {
 			// flip channels
+			currentArg++;
 		} else if (strcmp("-o", argv[currentArg]) == 0) {
 			// fade out
 			currentArg++;
@@ -40,6 +44,7 @@ int main(int argc, char **argv)
 		} else {
 			// no such arguement
 			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
+			return -1;
 		}
 		currentArg++;
 	}
@@ -115,7 +120,7 @@ int main(int argc, char **argv)
 
 	//Wave input testing
 	for ( int i = 0; i < numSamples; ++i) {
-		fprintf(stderr, "%hu : %hu\n", leftChannel[i], rightChannel[i]);
+		fprintf(stderr, "%hi : %hi\n", leftChannel[i], rightChannel[i]);
 	}
 
 	return 0;
@@ -136,3 +141,62 @@ int readHeader( WaveHeader* header )
 
 	return 1;
 }
+
+void echo(short channel[], WaveHeader *header, double delay, double volume)
+{
+	// Number of samples in one channel
+	unsigned int samples = header->dataChunk.size /
+		(header->formatChunk.channels * header->formatChunk.bitsPerSample/8);
+	
+	// Echo offset
+	unsigned int delayInSamples = header->formatChunk.sampleRate * delay;
+	
+	// The given waveform with echo added and space added for the echo
+	short *newWave = (short*) malloc(
+			sizeof(short) * (samples + delayInSamples));
+
+	// Fill newWave with old sound data
+	for (unsigned int i = 0; i < samples; ++i)
+		newWave[i] = channel[i];
+	
+	// Zero out extra space
+	for (unsigned int i = samples; i < samples + delayInSamples; ++i)
+		newWave[i] = 0;
+
+	// Add in echo
+	for (unsigned int i = delayInSamples; i < samples + delayInSamples; ++i) {
+		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
+		int value = channel[i - delayInSamples] * volume;
+		short newSound;
+		if (value > SHRT_MAX)
+			newSound = SHRT_MAX;
+		else if (value < SHRT_MIN)
+			newSound = SHRT_MIN;
+		else
+			newSound = value;
+
+		newWave[i] = newSound;
+	}
+
+	// Free old wave and point the wave pointer to newWave
+	free(channel);
+	channel = newWave;
+	
+	// Because the waveform is longer, we need to alter the header
+	// size data to be consistent
+	header->dataChunk.size += header->formatChunk.channels 
+		* header->formatChunk.bitsPerSample/8 * delayInSamples;
+	header->size += header->formatChunk.channels * 
+		header->formatChunk.bitsPerSample/8 * delayInSamples;
+
+	return;
+}
+
+
+
+
+
+
+
+
+
