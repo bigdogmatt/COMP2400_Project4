@@ -7,8 +7,14 @@
 int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
 short clampShort( int n );
+unsigned int computSamples(WaveHeader *header);
+
+/* wave editing functions */
 void echo(short channel[], WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
+void fadeIn(short channel[], WaveHeader *header, double seconds);
+void fadeOut(short channel[], WaveHeader *header, double seconds);
+
 
 int main(int argc, char **argv)
 {
@@ -199,8 +205,7 @@ int readHeader( WaveHeader* header )
 void echo(short channel[], WaveHeader *header, double delay, double volume)
 {
 	// Number of samples in one channel
-	unsigned int samples = header->dataChunk.size /
-		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
+	unsigned int samples = computSamples(header);
 
 	// Echo offset
 	unsigned int delayInSamples = header->formatChunk.sampleRate * delay;
@@ -240,8 +245,7 @@ void echo(short channel[], WaveHeader *header, double delay, double volume)
 void changeVolume(short channel[], WaveHeader *header, double factor)
 {
 	// Number of samples in one channel
-	unsigned int samples = header->dataChunk.size /
-		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
+	unsigned int samples = computSamples(header);
 
 	for (unsigned int i = 0; i < samples; ++i) {
 		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
@@ -249,6 +253,38 @@ void changeVolume(short channel[], WaveHeader *header, double factor)
 	}
 }
 
+void fadeIn(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = computSamples(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = 0; i < fadeCount && i < samples; ++i) {
+		double fadeFactor = (i/ (double)fadeCount) * (i/ (double)fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
+void fadeOut(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = computSamples(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = samples - fadeCount; i < samples; ++i) {
+		double x = i - (samples - fadeCount);
+		double fadeFactor = (1 - x/fadeCount) * (1 - x/fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
+/* Helper functions */
+
+/* prevent short overflow */
 short clampShort(int n)
 {
 	if (n > SHRT_MAX)
@@ -259,9 +295,10 @@ short clampShort(int n)
 		return n;
 }
 
-
-
-
-
+unsigned int computSamples(WaveHeader *header)
+{
+	return header->dataChunk.size /
+		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
+}
 
 
