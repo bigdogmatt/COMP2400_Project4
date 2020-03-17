@@ -6,7 +6,9 @@
 
 int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
+short clampShort( int n );
 void echo(short channel[], WaveHeader *header, double delay, double volume);
+void changeVolume(short channel[], WaveHeader *header, double factor);
 
 int main(int argc, char **argv)
 {
@@ -198,7 +200,7 @@ void echo(short channel[], WaveHeader *header, double delay, double volume)
 {
 	// Number of samples in one channel
 	unsigned int samples = header->dataChunk.size /
-		(header->formatChunk.channels * header->formatChunk.bitsPerSample/8);
+		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
 
 	// Echo offset
 	unsigned int delayInSamples = header->formatChunk.sampleRate * delay;
@@ -216,18 +218,9 @@ void echo(short channel[], WaveHeader *header, double delay, double volume)
 		newWave[i] = 0;
 
 	// Add in echo
-	for (unsigned int i = delayInSamples; i < samples + delayInSamples; ++i) {
+	for (unsigned int i = delayInSamples; i < samples+delayInSamples; ++i) {
 		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
-		int value = channel[i - delayInSamples] * volume;
-		short newSound;
-		if (value > SHRT_MAX)
-			newSound = SHRT_MAX;
-		else if (value < SHRT_MIN)
-			newSound = SHRT_MIN;
-		else
-			newSound = value;
-
-		newWave[i] = newSound;
+		newWave[i] = clampShort(channel[i - delayInSamples] * volume);
 	}
 
 	// Free old wave and point the wave pointer to newWave
@@ -243,3 +236,32 @@ void echo(short channel[], WaveHeader *header, double delay, double volume)
 
 	return;
 }
+
+void changeVolume(short channel[], WaveHeader *header, double factor)
+{
+	// Number of samples in one channel
+	unsigned int samples = header->dataChunk.size /
+		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
+
+	for (unsigned int i = 0; i < samples; ++i) {
+		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
+		channel[i] = clampShort(channel[i] * factor);
+	}
+}
+
+short clampShort(int n)
+{
+	if (n > SHRT_MAX)
+		return SHRT_MAX;
+	else if (n < SHRT_MIN)
+		return SHRT_MIN;
+	else
+		return n;
+}
+
+
+
+
+
+
+
