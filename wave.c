@@ -18,117 +18,27 @@ void fadeOut(short channel[], WaveHeader *header, double seconds);
 
 int main(int argc, char **argv)
 {
-	//command line input
-	int currentArg = 1;
-	while (currentArg < argc) {
-		if (strcmp( "-r", argv[currentArg]) == 0) {
-			// reverse sound
-		} else if (strcmp("-s", argv[currentArg]) == 0) {
-			// change speed
-			currentArg++;
-			char* str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "A positive number must be supplied for the speed to change");
-					return 10;
-				}
-				++str;
-			}
-			double speedFactor = strtod(argv[currentArg], NULL);
-		} else if (strcmp("-f", argv[currentArg]) == 0) {
-			// flip channels
-		} else if (strcmp("-o", argv[currentArg]) == 0) {
-			// fade out
-			currentArg++;
-			char* str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
-					return 11;
-				}
-				++str;
-			}
-			double fadeTime = strtod(argv[currentArg], NULL);
-		} else if (strcmp("-i", argv[currentArg]) == 0) {
-			// fade in
-			currentArg++;
-			char* str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
-					return 11;
-				}
-				++str;
-			}
-			double fadeTime = strtod(argv[currentArg], NULL);
-		} else if (strcmp("-v", argv[currentArg]) == 0) {
-			// volume
-			currentArg++;
-			char* str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "A positive number must be supplied for the volume to scale");
-					return 12;
-				}
-				++str;
-			}
-			double volumeFactor = strtod(argv[currentArg], NULL);
-		} else if (strcmp("-e", argv[currentArg]) == 0) {
-			// echo
-			currentArg++;
-			char* str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
-					return 13;
-				}
-				++str;
-			}
-			double delay = strtod(argv[currentArg], NULL);
-			currentArg++;
-			str = argv[currentArg];
-			while ( *str != '\0' ) {
-				if ( *str < '0' || *str > '9' ) {
-					fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
-					return 13;
-				}
-				++str;
-			}
-			double echoVolumeFactor = strtod(argv[currentArg], NULL);
-		} else {
-			// no such arguement
-			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
-			return 1;
-		}
-		currentArg++;
-	}
-
-	/**********
-	FRIDAY, MARCH 13th
-	**********/
-
 	//Wave data input
-	struct _WaveHeader header;
+	WaveHeader header;
 	readHeader(&header);
 
-	struct _FormatChunk fChunk = header.formatChunk;
-	struct _DataChunk dChunk = header.dataChunk;
 
-	unsigned int numBytes = dChunk.size; //Number of bytes in the data
 
-	unsigned short bitsPerSample = fChunk.bitsPerSample; //Used to check for error and calculate the number of samples
+	unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
+
+	unsigned short bitsPerSample = header.formatChunk.bitsPerSample; //Used to check for error and calculate the number of samples
 	if ( bitsPerSample != 16 ) {
 		fprintf(stderr, "File does not have 16-bit samples\n");
 		return 8;
 	}
 
-	unsigned short numChannels = fChunk.channels; //Used to check for error
+	unsigned short numChannels = header.formatChunk.channels; //Used to check for error
 	if ( numChannels != 2 ) {
 		fprintf(stderr, "File is not stereo\n");
 		return 6;
 	}
 
-	unsigned int sampleRate = fChunk.sampleRate; //Used to check for error
+	unsigned int sampleRate = header.formatChunk.sampleRate; //Used to check for error
 	if ( sampleRate != 44100 ) {
 		fprintf(stderr, "File does not use 44,100Hz sample rate\n");
 		return 7;
@@ -143,8 +53,8 @@ int main(int argc, char **argv)
 		return 2;
 	}
 
-	char a = getchar();
-	char b;
+	int a = getchar();
+	int b;
 	short value;
 	if ( a == EOF ) {
 		fprintf(stderr, "Format chunk is corrupted\n");
@@ -157,7 +67,7 @@ int main(int argc, char **argv)
 	// Storing the data
 	int leftIndex = 0;
 	int rightIndex = 0;
-	for ( int i = 0; i < numSamples; ++i ) {
+	for ( int i = 0; i < numSamples*2; ++i ) {
 		if ( b == EOF ) {
 			fprintf(stderr, "File size does not match size in header\n");
 			//return 9;
@@ -181,6 +91,67 @@ int main(int argc, char **argv)
 	//Wave input testing
 	for ( int i = 0; i < numSamples; ++i) {
 		fprintf(stderr, "%hi : %hi\n", leftChannel[i], rightChannel[i]);
+	}
+
+	//command line input
+	int currentArg = 1;
+	while (currentArg < argc) {
+		if (strcmp( "-r", argv[currentArg]) == 0) {
+			// reverse sound
+		} else if (strcmp("-s", argv[currentArg]) == 0) {
+			// change speed
+			currentArg++;
+			double speedFactor = atof(argv[currentArg]);
+			if ( speedFactor <= 0.0 ) {
+				fprintf(stderr, "A positive number must be supplied for the speed to change");
+				return 10;
+			}
+		} else if (strcmp("-f", argv[currentArg]) == 0) {
+			// flip channels
+		} else if (strcmp("-o", argv[currentArg]) == 0) {
+			// fade out
+			currentArg++;
+			double fadeTime = atof(argv[currentArg]);
+			if ( fadeTime <= 0.0 ) {
+				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				return 11;
+			}
+		} else if (strcmp("-i", argv[currentArg]) == 0) {
+			// fade in
+			currentArg++;
+			double fadeTime = atof(argv[currentArg]);
+			if ( fadeTime <= 0.0) {
+				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				return 11;
+			}
+		} else if (strcmp("-v", argv[currentArg]) == 0) {
+			// volume
+			currentArg++;
+			double volumeFactor = atof(argv[currentArg]);
+			if ( volumeFactor <= 0.0 ) {
+				fprintf(stderr, "A positive number must be supplied for the volume to scale");
+				return 12;
+			}
+		} else if (strcmp("-e", argv[currentArg]) == 0) {
+			// echo
+			currentArg++;
+			double delay = atof(argv[currentArg]);
+			if ( delay <= 0.0 ) {
+				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
+				return 13;
+			}
+			currentArg++;
+			double echoVolumeFactor = atof(argv[currentArg]);
+			if ( echoVolumeFactor <= 0.0 ) {
+				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
+				return 13;
+			}
+		} else {
+			// no such arguement
+			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
+			return 1;
+		}
+		currentArg++;
 	}
 
 	return 0;
