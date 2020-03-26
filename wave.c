@@ -8,7 +8,7 @@ int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
 unsigned int numSamplesCalc( WaveHeader* header );
 short clampShort( double n );
-void echo(short *channel[], WaveHeader *header, double delay, double volume);
+void echo(short **channel, WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
 void fadeIn(short channel[], WaveHeader *header, double seconds);
 void fadeOut(short channel[], WaveHeader *header, double seconds);
@@ -20,7 +20,7 @@ int main(int argc, char **argv)
 	WaveHeader header;
 	readHeader(&header);
 
-	unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
+	//unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
 
 	unsigned short bitsPerSample = header.formatChunk.bitsPerSample; //Used to check for error and calculate the number of samples
 	if ( bitsPerSample != 16 ) {
@@ -84,11 +84,6 @@ int main(int argc, char **argv)
 		b = getchar();
 	}
 
-	//Wave input testing
-	for ( int i = 0; i < numSamples; ++i) {
-		fprintf(stderr, "%hi : %hi\n", leftChannel[i], rightChannel[i]);
-	}
-
 	//command line input
 	int currentArg = 1;
 	while (currentArg < argc) {
@@ -103,7 +98,10 @@ int main(int argc, char **argv)
 				return 10;
 			}
 		} else if (strcmp("-f", argv[currentArg]) == 0) {
-			// flip channels
+			// Flip channels
+			short *temp = leftChannel;
+			leftChannel = rightChannel;
+			rightChannel = temp;
 		} else if (strcmp("-o", argv[currentArg]) == 0) {
 			// fade out
 			currentArg++;
@@ -154,6 +152,7 @@ int main(int argc, char **argv)
 		currentArg++;
 	}
 
+	/* Write data into stdout */
 	writeHeader(&header);
 
 	numSamples = numSamplesCalc(&header);
@@ -219,8 +218,8 @@ void echo(short** channel, WaveHeader *header, double delay, double volume)
 		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
 		newWave[i] = clampShort((*channel)[i - delayInSamples] * volume + newWave[i]);
 	}
-
-	// Free old wave and point the wave pointer to newWave
+	
+	// Free old wave and point it to newWave
 	free(*channel);
 	*channel = newWave;
 
@@ -254,11 +253,3 @@ short clampShort(double n)
 	else
 		return n;
 }
-
-unsigned int computSamples(WaveHeader *header)
-{
-	return header->dataChunk.size /
-		(header->formatChunk.channels*header->formatChunk.bitsPerSample/8);
-}
-
-
