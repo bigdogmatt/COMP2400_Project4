@@ -95,7 +95,8 @@ int main(int argc, char **argv)
 			currentArg++;
 			double speedFactor = atof(argv[currentArg]);
 			if ( speedFactor <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the speed to change");
+				fprintf(stderr, "A positive number must be supplied for the speed to "
+						"change");
 				return 10;
 			}
 		} else if (strcmp("-f", argv[currentArg]) == 0) {
@@ -108,17 +109,25 @@ int main(int argc, char **argv)
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
 			if ( fadeTime <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				fprintf(stderr, "A positive number must be supplied for the fade in and "
+						"fade out time");
 				return 11;
 			}
+
+			fadeOut(leftChannel, &header, fadeTime);
+			fadeOut(rightChannel, &header, fadeTime);
 		} else if (strcmp("-i", argv[currentArg]) == 0) {
 			// fade in
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
 			if ( fadeTime <= 0.0) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				fprintf(stderr, "A positive number must be supplied for the fade in and"
+						" fade out time");
 				return 11;
 			}
+
+			fadeIn(leftChannel, &header, fadeTime);
+			fadeIn(rightChannel, &header, fadeTime);
 		} else if (strcmp("-v", argv[currentArg]) == 0) {
 			// volume
 			currentArg++;
@@ -252,3 +261,32 @@ short clampShort(double n)
 	else
 		return n;
 }
+void fadeIn(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = numSamplesCalc(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = 0; i < fadeCount && i < samples; ++i) {
+		double fadeFactor = (i/ (double)fadeCount) * (i/ (double)fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
+void fadeOut(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = numSamplesCalc(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = samples - fadeCount; i < samples; ++i) {
+		double x = i - (samples - fadeCount);
+		double fadeFactor = (1 - x/fadeCount) * (1 - x/fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
