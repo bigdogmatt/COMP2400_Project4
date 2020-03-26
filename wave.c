@@ -8,7 +8,7 @@ int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
 unsigned int numSamplesCalc( WaveHeader* header );
 short clampShort( double n );
-void echo(short **channel, WaveHeader *header, double delay, double volume);
+int echo(short **channel, WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
 void fadeIn(short channel[], WaveHeader *header, double seconds);
 void fadeOut(short channel[], WaveHeader *header, double seconds);
@@ -84,6 +84,7 @@ int main(int argc, char **argv)
 		b = getchar();
 	}
 
+	
 	//command line input
 	int currentArg = 1;
 	while (currentArg < argc) {
@@ -142,8 +143,10 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
 				return 13;
 			}
-			echo(&leftChannel, &header, delay, echoVolumeFactor);
+			int bytesAdded = echo(&leftChannel, &header, delay, echoVolumeFactor);
 			echo(&rightChannel, &header, delay, echoVolumeFactor);
+			header.dataChunk.size += bytesAdded;
+			header.size += bytesAdded;
 		} else {
 			// no such arguement
 			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
@@ -193,7 +196,8 @@ unsigned int numSamplesCalc( WaveHeader* header )
 	return numSamples;
 }
 
-void echo(short** channel, WaveHeader *header, double delay, double volume)
+/* Adds an echo to the channel and returns the time offset in bytes */
+int echo(short** channel, WaveHeader *header, double delay, double volume)
 {
 	// Number of samples in one channel
 	unsigned int samples = numSamplesCalc(header);
@@ -223,14 +227,9 @@ void echo(short** channel, WaveHeader *header, double delay, double volume)
 	free(*channel);
 	*channel = newWave;
 
-	// Because the waveform is longer, we need to alter the header
-	// size data to be consistent
-	header->dataChunk.size += header->formatChunk.channels
-		* header->formatChunk.bitsPerSample/8 * delayInSamples;
-	header->size += header->formatChunk.channels *
-		header->formatChunk.bitsPerSample/8 * delayInSamples;
-
-	return;
+	// Return the size difference in bytes
+	return header->formatChunk.channels	* header->formatChunk.bitsPerSample/8 
+		* delayInSamples;
 }
 
 void changeVolume(short channel[], WaveHeader *header, double factor)
