@@ -8,8 +8,11 @@ int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
 unsigned int numSamplesCalc( WaveHeader* header );
 short clampShort( double n );
-void echo(short *channel[], WaveHeader *header, double delay, double volume);
+int echo(short **channel, WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
+void fadeIn(short channel[], WaveHeader *header, double seconds);
+void fadeOut(short channel[], WaveHeader *header, double seconds);
+
 
 int main(int argc, char **argv)
 {
@@ -17,7 +20,7 @@ int main(int argc, char **argv)
 	WaveHeader header;
 	readHeader(&header);
 
-	unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
+	//unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
 
 	unsigned short bitsPerSample = header.formatChunk.bitsPerSample; //Used to check for error and calculate the number of samples
 	if ( bitsPerSample != 16 ) {
@@ -81,11 +84,7 @@ int main(int argc, char **argv)
 		b = getchar();
 	}
 
-	//Wave input testing
-	for ( int i = 0; i < numSamples; ++i) {
-		fprintf(stderr, "%hi : %hi\n", leftChannel[i], rightChannel[i]);
-	}
-
+	
 	//command line input
 	int currentArg = 1;
 	while (currentArg < argc) {
@@ -96,27 +95,39 @@ int main(int argc, char **argv)
 			currentArg++;
 			double speedFactor = atof(argv[currentArg]);
 			if ( speedFactor <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the speed to change");
+				fprintf(stderr, "A positive number must be supplied for the speed to "
+						"change");
 				return 10;
 			}
 		} else if (strcmp("-f", argv[currentArg]) == 0) {
-			// flip channels
+			// Flip channels
+			short *temp = leftChannel;
+			leftChannel = rightChannel;
+			rightChannel = temp;
 		} else if (strcmp("-o", argv[currentArg]) == 0) {
 			// fade out
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
 			if ( fadeTime <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				fprintf(stderr, "A positive number must be supplied for the fade in and "
+						"fade out time");
 				return 11;
 			}
+
+			fadeOut(leftChannel, &header, fadeTime);
+			fadeOut(rightChannel, &header, fadeTime);
 		} else if (strcmp("-i", argv[currentArg]) == 0) {
 			// fade in
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
 			if ( fadeTime <= 0.0) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and fade out time");
+				fprintf(stderr, "A positive number must be supplied for the fade in and"
+						" fade out time");
 				return 11;
 			}
+
+			fadeIn(leftChannel, &header, fadeTime);
+			fadeIn(rightChannel, &header, fadeTime);
 		} else if (strcmp("-v", argv[currentArg]) == 0) {
 			// volume
 			currentArg++;
@@ -141,8 +152,10 @@ int main(int argc, char **argv)
 				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
 				return 13;
 			}
-			echo(&leftChannel, &header, delay, echoVolumeFactor);
+			int bytesAdded = echo(&leftChannel, &header, delay, echoVolumeFactor);
 			echo(&rightChannel, &header, delay, echoVolumeFactor);
+			header.dataChunk.size += bytesAdded;
+			header.size += bytesAdded;
 		} else {
 			// no such arguement
 			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
@@ -151,6 +164,7 @@ int main(int argc, char **argv)
 		currentArg++;
 	}
 
+	/* Write data into stdout */
 	writeHeader(&header);
 
 	numSamples = numSamplesCalc(&header);
@@ -191,7 +205,8 @@ unsigned int numSamplesCalc( WaveHeader* header )
 	return numSamples;
 }
 
-void echo(short** channel, WaveHeader *header, double delay, double volume)
+/* Adds an echo to the channel and returns the time offset in bytes */
+int echo(short** channel, WaveHeader *header, double delay, double volume)
 {
 	// Number of samples in one channel
 	unsigned int samples = numSamplesCalc(header);
@@ -216,19 +231,14 @@ void echo(short** channel, WaveHeader *header, double delay, double volume)
 		// Calculate the new sound level and clamp to [MIN SHORT, MAX SHORT]
 		newWave[i] = clampShort((*channel)[i - delayInSamples] * volume + newWave[i]);
 	}
-
-	// Free old wave and point the wave pointer to newWave
+	
+	// Free old wave and point it to newWave
 	free(*channel);
 	*channel = newWave;
 
-	// Because the waveform is longer, we need to alter the header
-	// size data to be consistent
-	header->dataChunk.size += header->formatChunk.channels
-		* header->formatChunk.bitsPerSample/8 * delayInSamples;
-	header->size += header->formatChunk.channels *
-		header->formatChunk.bitsPerSample/8 * delayInSamples;
-
-	return;
+	// Return the size difference in bytes
+	return header->formatChunk.channels	* header->formatChunk.bitsPerSample/8 
+		* delayInSamples;
 }
 
 void changeVolume(short channel[], WaveHeader *header, double factor)
@@ -251,3 +261,32 @@ short clampShort(double n)
 	else
 		return n;
 }
+void fadeIn(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = numSamplesCalc(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = 0; i < fadeCount && i < samples; ++i) {
+		double fadeFactor = (i/ (double)fadeCount) * (i/ (double)fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
+void fadeOut(short channel[], WaveHeader *header, double seconds)
+{
+	// Number of samples in one channel
+	unsigned int samples = numSamplesCalc(header);
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+
+	for (unsigned int i = samples - fadeCount; i < samples; ++i) {
+		double x = i - (samples - fadeCount);
+		double fadeFactor = (1 - x/fadeCount) * (1 - x/fadeCount);
+		channel[i] *= fadeFactor;
+	}
+
+	return;
+}
+
