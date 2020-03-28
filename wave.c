@@ -13,6 +13,7 @@ void changeVolume(short channel[], WaveHeader *header, double factor);
 void fadeIn(short channel[], WaveHeader *header, double seconds);
 void fadeOut(short channel[], WaveHeader *header, double seconds);
 void reverse(short channel[], WaveHeader *header);
+int changeSpeed(short **channel, WaveHeader *header, double factor);
 
 
 int main(int argc, char **argv)
@@ -102,6 +103,11 @@ int main(int argc, char **argv)
 						"change");
 				return 10;
 			}
+			int bytesAdded = changeSpeed(&leftChannel, &header, speedFactor);
+			bytesAdded = changeSpeed(&rightChannel, &header, speedFactor);
+			header.dataChunk.size += bytesAdded;
+			header.size += bytesAdded;
+
 		} else if (strcmp("-f", argv[currentArg]) == 0) {
 			// Flip channels
 			short *temp = leftChannel;
@@ -160,7 +166,7 @@ int main(int argc, char **argv)
 			header.dataChunk.size += bytesAdded;
 			header.size += bytesAdded;
 		} else {
-			// no such arguement
+			// no such argument
 			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
 			return 1;
 		}
@@ -301,4 +307,26 @@ void reverse(short channel[], WaveHeader *header)
 		channel[i] = channel[samples-i];
 		channel[samples-i] = temp;
 	}
+}
+
+/* Change the speed of channel and return the size difference in bytes.
+ * A factor of 2 corresponds to the new channel being twice as fast. */
+int changeSpeed(short **channel, WaveHeader *header, double factor)
+{
+	unsigned int samples = numSamplesCalc(header);
+	
+	// Create array to hold the modified channel
+	unsigned int newSize = samples / factor;
+	short *newChannel = (short*) malloc(newSize * sizeof(short));
+
+	// Fill new array
+	for (int i = 0; i < newSize; ++i)
+		newChannel[i] = (*channel)[(int) (i * factor)];
+
+	// change channel pointer
+	free(*channel);
+	*channel = newChannel;
+
+	return header->formatChunk.channels	* header->formatChunk.bitsPerSample/8 
+		* (newSize - samples);
 }
