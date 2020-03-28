@@ -12,6 +12,7 @@ int echo(short **channel, WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
 void fadeIn(short channel[], WaveHeader *header, double seconds);
 void fadeOut(short channel[], WaveHeader *header, double seconds);
+void reverse(short channel[], WaveHeader *header);
 
 
 int main(int argc, char **argv)
@@ -90,6 +91,8 @@ int main(int argc, char **argv)
 	while (currentArg < argc) {
 		if (strcmp( "-r", argv[currentArg]) == 0) {
 			// reverse sound
+			reverse(leftChannel, &header);
+			reverse(rightChannel, &header);
 		} else if (strcmp("-s", argv[currentArg]) == 0) {
 			// change speed
 			currentArg++;
@@ -290,3 +293,12 @@ void fadeOut(short channel[], WaveHeader *header, double seconds)
 	return;
 }
 
+void reverse(short channel[], WaveHeader *header)
+{
+	unsigned int samples = numSamplesCalc(header);
+	for (int i = 0; i < samples/2; ++i) {
+		short temp = channel[i];
+		channel[i] = channel[samples-i];
+		channel[samples-i] = temp;
+	}
+}
