@@ -4,10 +4,38 @@
 #include <string.h>
 #include <limits.h>
 
+enum errors { NO_ERROR, INVALID_ARG, OUT_OF_MEM, NOT_A_RIFF, 
+			  BAD_FORMAT_CHUNK, BAD_DATA_CHUNK, NOT_STEREO, INVALID_SAMPLE_RATE,
+			  INVALID_SAMPLE_SIZE, INVALID_FILE_SIZE, INVALID_SPEED, INVALID_TIME, 
+			  INVALID_VOLUME, INVALID_ECHO};
+
+const char *errorMessages[] = {
+		"",
+		"Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale]"
+		" < input > output",      
+        "Program out of memory",
+        "File is not a RIFF file",
+        "Format chunk is corrupted",
+        "Format chunk is corrupted",
+        "File is not stereo",       
+        "File does not use 44,100Hz sample rate",
+        "File does not have 16-bit samples",
+        "File size does not match size in header",
+        "A positive number must be supplied for the speed change",
+        "A positive number must be supplied for the fade in and fade out time",
+        "A positive number must be supplied for the volume scale",
+        "Positive numbers must be supplied for the echo delay and scale parameters"
+};
+
+/* Helper functions */
 int writeHeader( const WaveHeader* header );
 int readHeader( WaveHeader* header );
 unsigned int numSamplesCalc( WaveHeader* header );
 short clampShort( double n );
+int printError(int e);
+
+
+/* Waveform functions */
 int echo(short **channel, WaveHeader *header, double delay, double volume);
 void changeVolume(short channel[], WaveHeader *header, double factor);
 void fadeIn(short channel[], WaveHeader *header, double seconds);
@@ -18,46 +46,37 @@ int changeSpeed(short **channel, WaveHeader *header, double factor);
 
 int main(int argc, char **argv)
 {
-	//Wave data input
+	// Wave data input
 	WaveHeader header;
 	readHeader(&header);
 
-	//unsigned int numBytes = header.dataChunk.size; //Number of bytes in the data
+	// Used to check for error and calculate the number of samples
+	unsigned short bitsPerSample = header.formatChunk.bitsPerSample; 
+	if ( bitsPerSample != 16 )
+		return printError(INVALID_SAMPLE_SIZE);
+	
+	//Used to check for error
+	unsigned short numChannels = header.formatChunk.channels; 
+	if ( numChannels != 2 )
+		return printError(NOT_STEREO);
 
-	unsigned short bitsPerSample = header.formatChunk.bitsPerSample; //Used to check for error and calculate the number of samples
-	if ( bitsPerSample != 16 ) {
-		fprintf(stderr, "File does not have 16-bit samples\n");
-		return 8;
-	}
-
-	unsigned short numChannels = header.formatChunk.channels; //Used to check for error
-	if ( numChannels != 2 ) {
-		fprintf(stderr, "File is not stereo\n");
-		return 6;
-	}
-
-	unsigned int sampleRate = header.formatChunk.sampleRate; //Used to check for error
-	if ( sampleRate != 44100 ) {
-		fprintf(stderr, "File does not use 44,100Hz sample rate\n");
-		return 7;
-	}
+	//Used to check for error
+	unsigned int sampleRate = header.formatChunk.sampleRate; 
+	if ( sampleRate != 44100 )
+		return printError(INVALID_SAMPLE_RATE);
 
 	unsigned int numSamples = numSamplesCalc(&header);
 
 	short* leftChannel = (short*)malloc(numSamples * sizeof(short));
 	short* rightChannel = (short*)malloc(numSamples * sizeof(short));
-	if ( leftChannel == NULL || rightChannel == NULL) {
-		fprintf(stderr, "Program out of memory\n");
-		return 2;
-	}
+	if ( leftChannel == NULL || rightChannel == NULL)
+		return printError(OUT_OF_MEM);
 
 	int a = getchar();
 	int b;
 	short value;
-	if ( a == EOF ) {
-		fprintf(stderr, "Format chunk is corrupted\n");
-		return 5;
-	}
+	if ( a == EOF )
+		return printError(BAD_FORMAT_CHUNK);
 	else {
 		b = getchar();
 	}
@@ -66,10 +85,8 @@ int main(int argc, char **argv)
 	int leftIndex = 0;
 	int rightIndex = 0;
 	for ( int i = 0; i < numSamples*2; ++i ) {
-		if ( b == EOF ) {
-			fprintf(stderr, "File size does not match size in header\n");
-			return 9;
-		}
+		if ( b == EOF )
+			return printError(INVALID_FILE_SIZE);
 		else {
 			value = b << 8;
 			value = value | a;
@@ -98,11 +115,9 @@ int main(int argc, char **argv)
 			// change speed
 			currentArg++;
 			double speedFactor = atof(argv[currentArg]);
-			if ( speedFactor <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the speed to "
-						"change");
-				return 10;
-			}
+			if ( speedFactor <= 0.0 )
+				return printError(INVALID_SPEED);
+
 			int bytesAdded = changeSpeed(&leftChannel, &header, speedFactor);
 			bytesAdded = changeSpeed(&rightChannel, &header, speedFactor);
 			header.dataChunk.size += bytesAdded;
@@ -117,11 +132,8 @@ int main(int argc, char **argv)
 			// fade out
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
-			if ( fadeTime <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and "
-						"fade out time");
-				return 11;
-			}
+			if ( fadeTime <= 0.0 )
+				return printError(INVALID_TIME);
 
 			fadeOut(leftChannel, &header, fadeTime);
 			fadeOut(rightChannel, &header, fadeTime);
@@ -129,11 +141,9 @@ int main(int argc, char **argv)
 			// fade in
 			currentArg++;
 			double fadeTime = atof(argv[currentArg]);
-			if ( fadeTime <= 0.0) {
-				fprintf(stderr, "A positive number must be supplied for the fade in and"
-						" fade out time");
-				return 11;
-			}
+			if ( fadeTime <= 0.0)
+				return printError(INVALID_TIME);
+			
 
 			fadeIn(leftChannel, &header, fadeTime);
 			fadeIn(rightChannel, &header, fadeTime);
@@ -141,35 +151,29 @@ int main(int argc, char **argv)
 			// volume
 			currentArg++;
 			double volumeFactor = atof(argv[currentArg]);
-			if ( volumeFactor <= 0.0 ) {
-				fprintf(stderr, "A positive number must be supplied for the volume to scale");
-				return 12;
-			}
+			if ( volumeFactor <= 0.0 )
+				return printError(INVALID_VOLUME);
+			
 			changeVolume(leftChannel, &header, volumeFactor);
 			changeVolume(rightChannel, &header, volumeFactor);
 		} else if (strcmp("-e", argv[currentArg]) == 0) {
 			// echo
 			currentArg++;
 			double delay = atof(argv[currentArg]);
-			if ( delay <= 0.0 ) {
-				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
-				return 13;
-			}
+			if ( delay <= 0.0 )
+				return printError(INVALID_ECHO);
+			
 			currentArg++;
 			double echoVolumeFactor = atof(argv[currentArg]);
-			if ( echoVolumeFactor <= 0.0 ) {
-				fprintf(stderr, "Positive number must be supplied for the echo delay and scale parameters");
-				return 13;
-			}
+			if ( echoVolumeFactor <= 0.0 )
+				return printError(INVALID_ECHO);
+			
 			int bytesAdded = echo(&leftChannel, &header, delay, echoVolumeFactor);
 			echo(&rightChannel, &header, delay, echoVolumeFactor);
 			header.dataChunk.size += bytesAdded;
 			header.size += bytesAdded;
-		} else {
-			// no such argument
-			fprintf(stderr, "Usage: wave [[-r][-s factor][-f][-o delay][-i delay][-v scale][-e delay scale] < input > output\n");
-			return 1;
-		}
+		} else 
+			return printError(INVALID_ARG);
 		currentArg++;
 	}
 
@@ -185,7 +189,14 @@ int main(int argc, char **argv)
 		putchar(rightChannel[i] >> 8);
 	}
 
-	return 0;
+	return NO_ERROR;
+}
+
+/* Print the corresponding error message to standard error and return e */
+int printError(int e)
+{
+	fprintf(stderr, "%s\n", errorMessages[e]);
+	return e;
 }
 
 int writeHeader( const WaveHeader* header )
@@ -204,6 +215,7 @@ int readHeader( WaveHeader* header )
 	return 1;
 }
 
+/* returns the number of sampels in one channel */
 unsigned int numSamplesCalc( WaveHeader* header )
 {
 	unsigned int numBytes = header->dataChunk.size;
@@ -261,6 +273,7 @@ void changeVolume(short channel[], WaveHeader *header, double factor)
 	}
 }
 
+/* Returns a short of double with no overflow */
 short clampShort(double n)
 {
 	if (n > SHRT_MAX)
@@ -270,6 +283,7 @@ short clampShort(double n)
 	else
 		return n;
 }
+
 void fadeIn(short channel[], WaveHeader *header, double seconds)
 {
 	// Number of samples in one channel
@@ -326,7 +340,7 @@ int changeSpeed(short **channel, WaveHeader *header, double factor)
 	// change channel pointer
 	free(*channel);
 	*channel = newChannel;
-
+                                                               
 	return header->formatChunk.channels	* header->formatChunk.bitsPerSample/8 
 		* (newSize - samples);
 }
