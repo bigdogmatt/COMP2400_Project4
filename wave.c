@@ -29,28 +29,28 @@ int main(int argc, char **argv)
 	WaveHeader header;
 	readHeader(&header);
 
+	//Used to check for error
 	if( strncmp(header.ID, "RIFF", 4) )
 		return printError(NOT_A_RIFF);
 
+	//Used to check for error
 	if( (strncmp(header.formatChunk.ID, "fmt ", 4)) || header.formatChunk.size != 16 || header.formatChunk.compression != 1)
 		return printError(BAD_FORMAT_CHUNK);
 
+	//Used to check for error
 	if( strncmp(header.dataChunk.ID, "data", 4) )
 		return printError(BAD_DATA_CHUNK);
 
 	//Used to check for error
-	unsigned short numChannels = header.formatChunk.channels;
-	if ( numChannels != 2 )
+	if ( header.formatChunk.channels != 2 )
 		return printError(NOT_STEREO);
 
 	//Used to check for error
-	unsigned int sampleRate = header.formatChunk.sampleRate;
-	if ( sampleRate != 44100 )
+	if ( header.formatChunk.sampleRate != 44100 )
 		return printError(INVALID_SAMPLE_RATE);
 
-	// Used to check for error and calculate the number of samples
-	unsigned short bitsPerSample = header.formatChunk.bitsPerSample;
-	if ( bitsPerSample != 16 )
+	//Used to check for error
+	if ( header.formatChunk.bitsPerSample != 16 )
 		return printError(INVALID_SAMPLE_SIZE);
 
 	unsigned int numSamples = numSamplesCalc(&header);
