@@ -274,13 +274,19 @@ short clampShort(double n)
 		return n;
 }
 
+/* Fades the first "seconds" number of seconds in channel, such that
+ * the volume gradually inreases until it returns to standard volume. */
 void fadeIn(short channel[], WaveHeader *header, double seconds)
 {
 	// Number of samples in one channel
 	unsigned int samples = numSamplesCalc(header);
-	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
 
+	// Number of samples that will be altered by fading in
+	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
+	
+	// For the first fadeCount samples
 	for (unsigned int i = 0; i < fadeCount && i < samples; ++i) {
+		// Calculate factor to fade by based on sample number
 		double fadeFactor = (i/ (double)fadeCount) * (i/ (double)fadeCount);
 		channel[i] *= fadeFactor;
 	}
@@ -288,13 +294,19 @@ void fadeIn(short channel[], WaveHeader *header, double seconds)
 	return;
 }
 
+/* Fades the last "seconds" number of seconds in channel, such that
+ * the volume gradually decreases until it zeror volume and the sound wave ends. */
 void fadeOut(short channel[], WaveHeader *header, double seconds)
 {
 	// Number of samples in one channel
 	unsigned int samples = numSamplesCalc(header);
+
+	// Number of samples that will be altered by fading out
 	unsigned int fadeCount = header->formatChunk.sampleRate * seconds;
 
+	// For the last fadeCount samples
 	for (unsigned int i = samples - fadeCount; i < samples; ++i) {
+		// Calculate factor to fade by based on sample number
 		double x = i - (samples - fadeCount);
 		double fadeFactor = (1 - x/fadeCount) * (1 - x/fadeCount);
 		channel[i] *= fadeFactor;
